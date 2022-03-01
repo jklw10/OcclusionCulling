@@ -15,7 +15,7 @@ public class OcclusionCullingInstance {
     private final OcclusionCache cache;
     
     // Reused allocated data structures
-    private final BitSet skipList = new BitSet(); // Grows bigger in case some mod introduces giant hitboxes
+    //private final BitSet skipList = new BitSet(); // Grows bigger in case some mod introduces giant hitboxes
     private final boolean[] onFaceEdge = new boolean[6];
     private final Vec3d[] targetPoints = new Vec3d[8];
     private final Vec3d targetPos = new Vec3d(0, 0, 0);
@@ -37,18 +37,12 @@ public class OcclusionCullingInstance {
 
     public boolean isAABBVisible(Vec3d aabbMin, Vec3d aabbMax, Vec3d viewerPosition) {
         try {
-            int maxX = MathUtilities.floor(aabbMax.x
-                 + aabbExpansion);
-            int maxY = MathUtilities.floor(aabbMax.y
-                 + aabbExpansion);
-            int maxZ = MathUtilities.floor(aabbMax.z
-                 + aabbExpansion);
-            int minX = MathUtilities.floor(aabbMin.x
-                 - aabbExpansion);
-            int minY = MathUtilities.floor(aabbMin.y
-                - aabbExpansion);
-            int minZ = MathUtilities.floor(aabbMin.z
-                 - aabbExpansion);
+            int maxX = MathUtilities.floor(aabbMax.x + aabbExpansion);
+            int maxY = MathUtilities.floor(aabbMax.y + aabbExpansion);
+            int maxZ = MathUtilities.floor(aabbMax.z + aabbExpansion);
+            int minX = MathUtilities.floor(aabbMin.x - aabbExpansion);
+            int minY = MathUtilities.floor(aabbMin.y - aabbExpansion);
+            int minZ = MathUtilities.floor(aabbMin.z - aabbExpansion);
 
             cameraPos[0] = MathUtilities.floor(viewerPosition.x);
             cameraPos[1] = MathUtilities.floor(viewerPosition.y);
@@ -62,31 +56,27 @@ public class OcclusionCullingInstance {
                 return true; // We are inside of the AABB, don't cull
             }
             
-            skipList.clear();
+            //skipList.clear();
 
             // Just check the cache first
-            int id = 0;
+            //int id = 0;
             for (int x = minX; x <= maxX; x++) {
                 for (int y = minY; y <= maxY; y++) {
                     for (int z = minZ; z <= maxZ; z++) {
                         int cachedValue = getCacheValue(x, y, z);
-
                         if (cachedValue == 1) {
                             // non-occluding
                             return true;
                         }
-
-                        if (cachedValue != 0) {
-                            // was checked and it wasn't visible
-                            skipList.set(id);
-                        }
-                        id++;
+                        //id++;
                     }
                 }
             }
             
+            iteratePlane
+            
+            
             // since the cache wasn't helpfull 
-            id = 0;
             for (int x = minX; x <= maxX; x++) {
                 onFaceEdge[0] = x == minX;
                 onFaceEdge[1] = x == maxX;
@@ -96,11 +86,9 @@ public class OcclusionCullingInstance {
                     for (int z = minZ; z <= maxZ; z++) {
                         onFaceEdge[4] = z == minZ;
                         onFaceEdge[5] = z == maxZ;
-                        if(skipList.get(id)) { // was checked and it wasn't visible
-                            id++;
+                        if(getCacheValue(x, y, z) == 2) { // was checked and it wasn't visible
                             continue;
                         }
-                        
                         if ((onFaceEdge[0] && relX == Relative.POSITIVE)
                             || (onFaceEdge[1] && relX == Relative.NEGATIVE)
                             || (onFaceEdge[2] && relY == Relative.POSITIVE)
@@ -112,7 +100,6 @@ public class OcclusionCullingInstance {
                                 return true;
                             }
                         }
-                        id++;
                     }
                 }
             }
@@ -125,6 +112,48 @@ public class OcclusionCullingInstance {
         return true;
     }
 
+    private boolean iteratePlane(Vec3i center, Vec3i size, Vec3i direction, Vec3d viewerPosition)
+    {
+        vec3i hSize = new Vec3i(size.X / 2f,size.Y / 2f,size.Z / 2f);
+        
+        Vec3i one = new Vec3i(1);
+        
+        Vec3d centOff = new(size.X % 2, size.Y % 2, size.Z % 2);
+        centOff = one / (one + (one - centOff));
+        
+        Vec3i absD = new(Math.Abs(direction.X), Math.Abs(direction.Y), Math.Abs(direction.Z));
+        Vec3i notdir = one - absD;
+        //get the corner of the plane
+        Vec3d planeCenter = center + centOff + direction * hSize;
+        Vec3d planeCorner = planeCenter + notdir * -hSize;
+        
+        int xmax = (int)(notdir.X * size.X + notdir.Y * size.Y * absD.X);
+
+        int ymax = (int)(notdir.Y * size.Y * absD.Z + 
+                         notdir.Z * size.Z * absD.X + 
+                         notdir.Z * size.Z * absD.Y);
+
+        for (int x = 0; x < xmax; x++)
+        {
+            for (int y = 0; y < ymax; y++)
+            {
+                Vec3i p = (Vec3i)planeCorner;
+    
+                p.X += notdir.X * x;
+    
+                p.Y += notdir.Y * x * absD.X;
+                p.Y += notdir.Y * y * absD.Z;
+    
+                p.Z += notdir.Z * y * absD.X;
+                p.Z += notdir.Z * y * absD.Y;
+                
+                targetPos.set(p.X, p.Y, p.Z);
+                if (isVoxelVisible(viewerPosition, targetPos, onFaceEdge)) {
+                    return true;
+                }
+            }
+        }
+    }
     private boolean isVoxelVisible(Vec3d viewerPosition, Vec3d position,
                                    boolean[] faceEdgeData) {
         int targetSize = 0;
